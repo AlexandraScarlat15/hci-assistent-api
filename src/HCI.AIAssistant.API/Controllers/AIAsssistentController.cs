@@ -1,33 +1,164 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+// // using System;
+// // using System.Collections.Generic;
+// // using System.Linq;
+// // using System.Threading.Tasks;
+// // using Microsoft.AspNetCore.Mvc;
+
+// // using HCI.AIAssistant.API.Models.DTOs.AIAssistentController;
+// // using System.Reflection.Metadata.Ecma335;
+
+
+// // namespace HCI.AIAssistant.API.Controllers;
+
+// // [ApiController]
+// // [Route("api/[controller]")]
+// // public class AIAsssistentController : ControllerBase
+// // {
+// //     [HttpPost("/message")]
+// //     // public async Task<ActionResult<AIAssistentControllerPostMessageResponseDTO>>PostMessageAsync([FromBody] AIAssistantControllerPostMessageRequestDTO request)
+// //     // [
+// //     //     TextMessage = $"You said: {request.TextMessage}"
+// //     // ];
+// //     // return Ok(response);
+
+// //     public async Task<ActionResult<AIAssistentControllerPostMessageResponseDTO>> PostMessageAsync([FromBody] AIAssistentControllerPostMessageRequestDTO request)
+// //     {
+// //         // Here you would typically process the request and generate a response.
+// //         AIAssistentControllerPostMessageResponseDTO response = new AIAssistentControllerPostMessageResponseDTO
+// //         {
+// //             TextMessage = $"You said: {request.TextMessage}"
+// //         };
+
+// //         return Ok(response);
+// //     }
+// // }
+
+// using Microsoft.AspNetCore.Mvc;
+
+// //using HCI.AIAssistant.API.Models.DTOs.AIAssistantController;
+// using HCI.AIAssistant.API.Models.DTOs.AIAssistentController;
+// using HCI.AIAssistant.API.Services;
+// using HCI.AIAssistant.API.Models.DTOs;
+
+// namespace HCI.AIAssistant.API.Controllers;
+
+// [ApiController]
+// [Route("api/[controller]")]
+// public class AIAssistantController : ControllerBase
+// {
+//      private readonly ISecretsService _secretsService;
+//     private readonly IAppConfigurationsService _appConfigurationsService;
+//     private readonly IAIAssistantService _aIAssistantService;
+//     private readonly IParametricFunctions _parametricFunctions;
+
+//     public AIAssistantController(
+//         IAIAssistantService aIAssistantService,
+//         IParametricFunctions parametricFunctions
+//     )
+//     {
+//         _aIAssistantService = aIAssistantService;
+//         _parametricFunctions = parametricFunctions;
+//     }
+
+//     [HttpPost("/message")]
+//     [ProducesResponseType(typeof(AIAssistentControllerPostMessageResponseDTO), 200)]
+//     [ProducesResponseType(typeof(ErrorResponseDTO), 400)]
+//     public async Task<ActionResult> PostMessage([FromBody] AIAssistentControllerPostMessageRequestDTO request)
+//     {
+//         if (!_parametricFunctions.ObjectExistsAndHasNoNullPublicProperties(request))
+//         {
+//             return BadRequest(
+//                 new ErrorResponseDTO()
+//                 {
+//                     TextErrorTitle = "AtLeastOneNullParameter",
+//                     TextErrorMessage = "Some parameters are null/missing.",
+//                     TextErrorTrace = _parametricFunctions.GetCallerTrace()
+//                 }
+//             );
+//         }
+
+// #pragma warning disable CS8604
+//         string textMessageResponse = await _aIAssistantService.SendMessageAndGetResponseAsync(request.TextMessage);
+// #pragma warning restore CS8604
+
+//         AIAssistentControllerPostMessageResponseDTO response = new()
+//         {
+//             TextMessage = textMessageResponse
+//         };
+
+//         return Ok(response);
+//     }
+// }
+
 using Microsoft.AspNetCore.Mvc;
 
+//using HCI.AIAssistant.API.Models.DTOs.Controllers;
 using HCI.AIAssistant.API.Models.DTOs.AIAssistentController;
-using System.Reflection.Metadata.Ecma335;
-
+using HCI.AIAssistant.API.Services;
+using HCI.AIAssistant.API.Models.DTOs;
+using Newtonsoft.Json;
+using Microsoft.Azure.Devices;
+using System.Text;
 
 namespace HCI.AIAssistant.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AIAsssistentController : ControllerBase
+public class AIAssistantController : ControllerBase
 {
-    [HttpPost("/message")]
-    // public async Task<ActionResult<AIAssistentControllerPostMessageResponseDTO>>PostMessageAsync([FromBody] AIAssistantControllerPostMessageRequestDTO request)
-    // [
-    //     TextMessage = $"You said: {request.TextMessage}"
-    // ];
-    // return Ok(response);
+    private readonly ISecretsService _secretsService;
+    private readonly IAppConfigurationsService _appConfigurationsService;
+    private readonly IAIAssistantService _aIAssistantService;
+    private readonly IParametricFunctions _parametricFunctions;
 
-    public async Task<ActionResult<AIAssistentControllerPostMessageResponseDTO>> PostMessageAsync([FromBody] AIAssistentControllerPostMessageRequestDTO request)
+    public AIAssistantController(
+        ISecretsService secretsService,
+        IAppConfigurationsService appConfigurationsService,
+        IAIAssistantService aIAssistantService,
+        IParametricFunctions parametricFunctions
+    )
     {
-        // Here you would typically process the request and generate a response.
-        AIAssistentControllerPostMessageResponseDTO response = new AIAssistentControllerPostMessageResponseDTO
+        _secretsService = secretsService;
+        _appConfigurationsService = appConfigurationsService;
+        _aIAssistantService = aIAssistantService;
+        _parametricFunctions = parametricFunctions;
+    }
+
+    [HttpPost("message")]
+    [ProducesResponseType(typeof(AIAssistentControllerPostMessageResponseDTO), 200)]
+    [ProducesResponseType(typeof(ErrorResponseDTO), 400)]
+    public async Task<ActionResult> PostMessage([FromBody] AIAssistentControllerPostMessageRequestDTO request)
+    {
+        if (!_parametricFunctions.ObjectExistsAndHasNoNullPublicProperties(request))
         {
-            TextMessage = $"You said: {request.TextMessage}"
+            return BadRequest(
+                new ErrorResponseDTO()
+                {
+                    TextErrorTitle = "AtLeastOneNullParameter",
+                    TextErrorMessage = "Some parameters are null/missing.",
+                    TextErrorTrace = _parametricFunctions.GetCallerTrace()
+                }
+            );
+        }
+
+#pragma warning disable CS8604
+        string textMessageResponse = await _aIAssistantService.SendMessageAndGetResponseAsync(request.TextMessage);
+#pragma warning restore CS8604
+
+        AIAssistentControllerPostMessageResponseDTO response = new()
+        {
+            TextMessage = textMessageResponse
         };
+
+        string? ioTHubConnectionString = _secretsService?.IoTHubSecrets?.ConnectionString;
+        if (ioTHubConnectionString != null)
+        {
+            var serviceClientForIoTHub = ServiceClient.CreateFromConnectionString(ioTHubConnectionString);
+            var seralizedMessage = JsonConvert.SerializeObject(textMessageResponse);
+
+            var ioTMessage = new Message(Encoding.UTF8.GetBytes(seralizedMessage));
+            await serviceClientForIoTHub.SendAsync(_appConfigurationsService.IoTDeviceName, ioTMessage);
+        }
 
         return Ok(response);
     }
