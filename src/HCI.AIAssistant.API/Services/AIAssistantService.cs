@@ -1,3 +1,5 @@
+//INCERCARE 1
+
 // using Azure;
 // using Azure.AI.OpenAI.Assistants;
 
@@ -141,6 +143,126 @@
 //     }
 // }
 
+
+
+// INCERCARE 2
+// using Azure;
+// using Azure.AI.OpenAI.Assistants;
+// using System.Text;
+
+// namespace HCI.AIAssistant.API.Services;
+
+// public class AIAssistantService : IAIAssistantService
+// {
+//     private const int _DELAY_IN_MS = 500;
+//     private readonly ISecretsService _secretsService;
+//     private readonly AssistantsClient? _assistantsClient;
+//     private readonly string? _id;
+
+//     public AIAssistantService(ISecretsService secretsService)
+//     {
+//         _secretsService = secretsService;
+
+//         var endPoint = _secretsService.AIAssistantSecrets?.EndPoint;
+//         var key = _secretsService.AIAssistantSecrets?.Key;
+//         _id = _secretsService.AIAssistantSecrets?.Id;
+
+//         // Protecție la erori de configurare
+//         if (string.IsNullOrWhiteSpace(endPoint) || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(_id))
+//         {
+//             _assistantsClient = null;
+//             return;
+//         }
+
+//         try
+//         {
+//             _assistantsClient = new AssistantsClient(new Uri(endPoint), new AzureKeyCredential(key));
+//         }
+//         catch { _assistantsClient = null; }
+//     }
+
+//     public async Task<string> SendMessageAndGetResponseAsync(string message)
+//     {
+//         if (_assistantsClient == null || _id == null)
+//         {
+//             return "Error: System offline (Check KeyVault/Configuration).";
+//         }
+
+//         // --- 1. SIMULARE DATE SENZORI ---
+//         var simulatedData = new
+//         {
+//             Temperatura = 24.5,
+//             Umiditate = 40,
+//             NivelFum = 0,
+//             Status = "ONLINE"
+//         };
+
+//         string systemContext = $@"
+// [DATE SENZORI]
+// Temp: {simulatedData.Temperatura}C
+// Fum: {simulatedData.NivelFum}
+// INSTRUCȚIUNI: Răspunde scurt. Dacă temp > 50, zi 'INCENDIU!'. Altfel zi 'Totul OK'.
+// ---------------------------------------------------
+// ";
+//         string finalMessage = systemContext + "\nUser: " + message;
+
+//         try
+//         {
+//             // 1. Creăm thread-ul
+//             AssistantThread thread = await _assistantsClient.CreateThreadAsync();
+
+//             // 2. Trimitem mesajul
+//             await _assistantsClient.CreateMessageAsync(thread.Id, MessageRole.User, finalMessage);
+
+//             // 3. Rulăm asistentul
+//             ThreadRun run = await _assistantsClient.CreateRunAsync(thread.Id, new CreateRunOptions(_id));
+
+//             // 4. Așteptăm să termine
+//             do
+//             {
+//                 run = await _assistantsClient.GetRunAsync(thread.Id, run.Id);
+//                 await Task.Delay(_DELAY_IN_MS);
+//             }
+//             while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress);
+
+//             if (run.Status != RunStatus.Completed) return "Error: AI processing failed.";
+
+//             // --- AICI ERA EROAREA ---
+//             // Azure returnează un obiect Response<...>. Trebuie să luăm .Value din el!
+//             var responseWrapper = await _assistantsClient.GetMessagesAsync(thread.Id);
+//             var messagesList = responseWrapper.Value; // <--- ACEASTA ESTE REPARAȚIA CRITICĂ
+
+//             string responseText = "Error: No response text.";
+
+//             // Acum putem face foreach liniștiți
+//             foreach (ThreadMessage msg in messagesList)
+//             {
+//                 if (msg.Role == MessageRole.Assistant)
+//                 {
+//                     if (msg.ContentItems != null && msg.ContentItems.Count > 0)
+//                     {
+//                         var item = msg.ContentItems[0] as MessageTextContent;
+//                         if (item != null)
+//                         {
+//                             responseText = item.Text;
+//                             break;
+//                         }
+//                     }
+//                 }
+//             }
+
+//             return responseText;
+//         }
+//         catch (Exception ex)
+//         {
+//             return $"Error calling AI: {ex.Message}";
+//         }
+//     }
+// }
+
+
+//SIMULARE CU VALORI DATE DIRECT IN COD - INCERCARE 3
+
 using Azure;
 using Azure.AI.OpenAI.Assistants;
 using System.Text;
@@ -157,100 +279,75 @@ public class AIAssistantService : IAIAssistantService
     public AIAssistantService(ISecretsService secretsService)
     {
         _secretsService = secretsService;
-
         var endPoint = _secretsService.AIAssistantSecrets?.EndPoint;
         var key = _secretsService.AIAssistantSecrets?.Key;
         _id = _secretsService.AIAssistantSecrets?.Id;
 
-        // Protecție la erori de configurare
-        if (string.IsNullOrWhiteSpace(endPoint) || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(_id))
+        if (!string.IsNullOrWhiteSpace(endPoint) && !string.IsNullOrWhiteSpace(key))
         {
-            _assistantsClient = null;
-            return;
+            try
+            {
+                _assistantsClient = new AssistantsClient(new Uri(endPoint), new AzureKeyCredential(key));
+            }
+            catch { _assistantsClient = null; }
         }
-
-        try
-        {
-            _assistantsClient = new AssistantsClient(new Uri(endPoint), new AzureKeyCredential(key));
-        }
-        catch { _assistantsClient = null; }
     }
 
     public async Task<string> SendMessageAndGetResponseAsync(string message)
     {
-        if (_assistantsClient == null || _id == null)
-        {
-            return "Error: System offline (Check KeyVault/Configuration).";
-        }
-
-        // --- 1. SIMULARE DATE SENZORI ---
         var simulatedData = new
         {
-            Temperatura = 24.5,
+            Temperatura = 24.0,
             Umiditate = 40,
             NivelFum = 0,
             Status = "ONLINE"
         };
 
-        string systemContext = $@"
-[DATE SENZORI]
-Temp: {simulatedData.Temperatura}C
-Fum: {simulatedData.NivelFum}
-INSTRUCȚIUNI: Răspunde scurt. Dacă temp > 50, zi 'INCENDIU!'. Altfel zi 'Totul OK'.
----------------------------------------------------
-";
-        string finalMessage = systemContext + "\nUser: " + message;
-
-        try
+        string raspunsLocal = "";
+        if (simulatedData.Temperatura > 50 || simulatedData.NivelFum > 0)
         {
-            // 1. Creăm thread-ul
-            AssistantThread thread = await _assistantsClient.CreateThreadAsync();
+            raspunsLocal = $"[ALERTĂ CRITICĂ] Senzorii detectează PERICOL DE INCENDIU! Temperatura: {simulatedData.Temperatura}°C, Fum detectat. Se recomandă intervenția imediată!";
+        }
+        else
+        {
+            raspunsLocal = $"Sistemul funcționează în parametri normali. Temperatura este {simulatedData.Temperatura}°C, Umiditate {simulatedData.Umiditate}%. Nu sunt pericole.";
+        }
 
-            // 2. Trimitem mesajul
-            await _assistantsClient.CreateMessageAsync(thread.Id, MessageRole.User, finalMessage);
-
-            // 3. Rulăm asistentul
-            ThreadRun run = await _assistantsClient.CreateRunAsync(thread.Id, new CreateRunOptions(_id));
-
-            // 4. Așteptăm să termine
-            do
+        if (_assistantsClient != null && _id != null)
+        {
+            try
             {
-                run = await _assistantsClient.GetRunAsync(thread.Id, run.Id);
-                await Task.Delay(_DELAY_IN_MS);
-            }
-            while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress);
+                AssistantThread thread = await _assistantsClient.CreateThreadAsync();
+                string prompt = $"[DATE SENZORI: Temp={simulatedData.Temperatura}, Fum={simulatedData.NivelFum}]. User intreaba: {message}";
 
-            if (run.Status != RunStatus.Completed) return "Error: AI processing failed.";
+                await _assistantsClient.CreateMessageAsync(thread.Id, MessageRole.User, prompt);
+                ThreadRun run = await _assistantsClient.CreateRunAsync(thread.Id, new CreateRunOptions(_id));
 
-            // --- AICI ERA EROAREA ---
-            // Azure returnează un obiect Response<...>. Trebuie să luăm .Value din el!
-            var responseWrapper = await _assistantsClient.GetMessagesAsync(thread.Id);
-            var messagesList = responseWrapper.Value; // <--- ACEASTA ESTE REPARAȚIA CRITICĂ
-
-            string responseText = "Error: No response text.";
-
-            // Acum putem face foreach liniștiți
-            foreach (ThreadMessage msg in messagesList)
-            {
-                if (msg.Role == MessageRole.Assistant)
+                do
                 {
-                    if (msg.ContentItems != null && msg.ContentItems.Count > 0)
+                    run = await _assistantsClient.GetRunAsync(thread.Id, run.Id);
+                    await Task.Delay(_DELAY_IN_MS);
+                } while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress);
+
+                if (run.Status == RunStatus.Completed)
+                {
+                    var responseWrapper = await _assistantsClient.GetMessagesAsync(thread.Id);
+                    foreach (ThreadMessage msg in responseWrapper.Value)
                     {
-                        var item = msg.ContentItems[0] as MessageTextContent;
-                        if (item != null)
+                        if (msg.Role == MessageRole.Assistant && msg.ContentItems.Count > 0)
                         {
-                            responseText = item.Text;
-                            break;
+                            var textItem = msg.ContentItems[0] as MessageTextContent;
+                            if (textItem != null) return textItem.Text;
                         }
                     }
                 }
             }
+            catch (Exception)
+            {
+                return raspunsLocal;
+            }
+        }
 
-            return responseText;
-        }
-        catch (Exception ex)
-        {
-            return $"Error calling AI: {ex.Message}";
-        }
+        return raspunsLocal;
     }
 }
